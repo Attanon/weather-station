@@ -7,13 +7,13 @@
 #include <ArduinoJson.h>
 #include "config.h"
 #include "logging.h"
+#include <CertStoreBearSSL.h>
+#include <FS.h>
+#include <LittleFS.h>
+#include <ESP8266HTTPClient.h>
 
 #ifndef URL_HOST
 #error("You have to define URL_HOST")
-#endif
-
-#ifndef URL_PORT
-#error("You have to define URL_PORT")
 #endif
 
 #ifndef URL_PATH
@@ -23,7 +23,7 @@
 class DataSource {
 
 public:
-    void init(const char* fingerPrint, String* roomName, String* probeName);
+    void init(String* roomName, String* probeName);
 
     void sendTemperatureData(float temperature, float humidity, float preasure, float altitude);
 
@@ -31,4 +31,7 @@ private:
     const char* sslFingerPrint;
     String* roomName;
     String* probeName;
+    BearSSL::CertStore certStore;
+    WiFiClientSecure wifiClient;
+    bool initialized = false;
 };

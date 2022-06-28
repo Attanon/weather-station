@@ -3,3 +3,5 @@ CMakeListsPrivate.txt
 cmake-build-*/ 
 src/config.h
 .idea
+data/certs.ar
+!data/.emptyfile

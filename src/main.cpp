@@ -11,6 +11,7 @@
 #include "dataSource.h"
 #include "OLEDDisplayUi.h"
 #include "time.h"
+#include <FS.h>
 #include "logging.h"
 
 Adafruit_SHT31 sht31 = Adafruit_SHT31();
@@ -21,10 +22,8 @@ bool shouldSaveConfig = false;
 String roomName = "roomName";
 String probeName = "probeName";
 
-const char* fingerprint = "19 D9 C0 8A C3 F0 EC 4C A1 CD BD 85 02 B8 2F 06 70 32 4C A5";
-
 bool canMeasureHumidity = true;
-bool sendData = false;
+bool sendData = true;
 int readEverySeconds = 10; // in seconds
 int sendEverySeconds = 60; // in seconds
 
@@ -77,8 +76,18 @@ void setup() {
     while (!Serial)
         delay(10);
 
+    //read configuration from FS json
+    DEBUG_PROGRAM_LN("mounting FS...");
+
+    if (LittleFS.begin()) {
+        DEBUG_PROGRAM_LN("mounted file system");
+    } else {
+        DEBUG_PROGRAM_LN("cannot mounted file system");
+        return;
+    }
+
     //clean FS, for testing
-    //SPIFFS.format();
+    //LittleFS.format();
 
     pinMode(RESET_WIFI_BUTTON, INPUT);
 
@@ -92,8 +101,8 @@ void setup() {
 
     delay(1000);
 
-    dataSource.init(fingerprint, &roomName, &probeName);
     initConfig();
+    dataSource.init(&roomName, &probeName);
 
     DEBUG_PROGRAM_LN("test for SHT31 probe (temperature, humidity)");
     if (! sht31.begin(SHT31_DEFAULT_ADDR)) {   // Set to 0x45 for alternate i2c addr
@@ -228,25 +237,6 @@ void loop() {
                 DEBUG_PROGRAM_F("Preassure: %f hPa\n", preasure);
                 DEBUG_PROGRAM_F("Approx. Altitude: %f m\n", altitude);
 
-//    Serial.println("fetching google");
-//    fetch.GET("https://www.google.com");
-//    while (fetch.busy())
-//    {
-//        if (fetch.available()) {
-//            Serial.write(fetch.read());
-//        }
-//
-//        delay(10);
-//    }
-//
-//    if (fetch.available()) {
-//        Serial.write(fetch.read());
-//    }
-//
-//    Serial.println("cleaning");
-//    fetch.clean();
-
-//    delay(readEverySeconds);
                 readed = true;
             }
         } else if (readed) {
@@ -256,36 +246,28 @@ void loop() {
 }
 
 void initConfig() {
-    //read configuration from FS json
-    DEBUG_PROGRAM_LN("mounting FS...");
+    if (LittleFS.exists("/config.json")) {
+        //file exists, reading and loading
+        DEBUG_PROGRAM_LN("reading config file");
+        File configFile = LittleFS.open("/config.json", "r");
+        if (configFile) {
+            DEBUG_PROGRAM_LN("opened config file");
+            size_t size = configFile.size();
+            // Allocate a buffer to store contents of the file.
+            std::unique_ptr<char[]> buf(new char[size]);
 
-    if (LittleFS.begin()) {
-        DEBUG_PROGRAM_LN("mounted file system");
-        if (LittleFS.exists("/config.json")) {
-            //file exists, reading and loading
-            DEBUG_PROGRAM_LN("reading config file");
-            File configFile = LittleFS.open("/config.json", "r");
-            if (configFile) {
-                DEBUG_PROGRAM_LN("opened config file");
-                size_t size = configFile.size();
-                // Allocate a buffer to store contents of the file.
-                std::unique_ptr<char[]> buf(new char[size]);
-
-                configFile.readBytes(buf.get(), size);
-                DynamicJsonDocument doc(1024);
-                DeserializationError error = deserializeJson(doc, buf.get());
-                if (error) {
-                    DEBUG_PROGRAM_LN("failed to load json config");
-                } else {
-                    DEBUG_PROGRAM_LN("parsed json");
-                    roomName = String(doc["roomName"]);
-                    probeName = String(doc["probeName"]);
-                    shouldResetConnection = (bool)doc["shouldReset"];
-                }
+            configFile.readBytes(buf.get(), size);
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, buf.get());
+            if (error) {
+                DEBUG_PROGRAM_LN("failed to load json config");
+            } else {
+                DEBUG_PROGRAM_LN("parsed json");
+                roomName = String(doc["roomName"]);
+                probeName = String(doc["probeName"]);
+                shouldResetConnection = (bool)doc["shouldReset"];
             }
         }
-    } else {
-        DEBUG_PROGRAM_LN("failed to mount FS");
     }
 
     WiFiManagerParameter custom_room_name("room_name", "roomName", roomName.c_str(), 25);
